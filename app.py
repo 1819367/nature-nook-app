@@ -6,11 +6,19 @@ from langchain_core.prompts import (
     PromptTemplate,
 ) 
 from langchain_openai import OpenAI
+from langchain_core.output_parsers import JsonOutputParser 
 
 # app will run at: http://127.0.0.1:5000/
 
 # Initialize the OpenAI language model
-llm = OpenAI()
+# set the token limit to -1 to avoid output parcer exception errors for large files
+# there is a risk doing this, NO limit on the token usage
+llm = OpenAI(
+    max_tokens = -1
+)
+
+# create an instance of the JSONOutputParserclass
+parser = JsonOutputParser()
 
 # Initialize logging
 logging.basicConfig(filename="app.log", level=logging.INFO)
@@ -130,9 +138,17 @@ def view_trip():
     response = llm.invoke(prompt)
 
     # to see the response from OpenAI
-    log.info(response) 
+    # commented out to parse
+    # log.info(response) 
 
-    return render_template("view-trip.html")
+    # parse the model's response using parser, set to new variable called output
+    output = parser.parse(response)
+
+    # log output
+    log.info(output)
+   
+    # add second argument for the context dictionary as a key value pair, key = output, value = output
+    return render_template("view-trip.html", output = output)
 
 
 # Run the flask server
