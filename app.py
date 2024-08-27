@@ -28,9 +28,8 @@ log = logging.getLogger("app")
 # Initialize the Flask application
 app = Flask(__name__)
 
-# new function to create a PromptTemplate
-# pass the user's submitted form data (form_data) as a parameter
-def build_new_trip_prompt(form_data):
+# updated to return a prompt template not a formatted prompt
+def build_new_trip_prompt_template():
     # examples of prompts and responses
     examples = [
         {
@@ -85,20 +84,26 @@ This trip is to Grand Canyon National Park between 2024-6-5 and 2024-6-8. This p
     # log info to check prompt template.  removed after checking
     # log.info(example_prompt.format(**examples[1]))
 
+    # update for first chain
     # create the few-shot prompt template
     few_shot_prompt = FewShotPromptTemplate(
         examples = examples, #these are the prompt examples
         example_prompt = example_prompt, #this is the example prompt template
-        suffix = "{input}", #sets the real prmpt with the user's form data, it's appended at the end of the example prompts
-        input_variables = ["input"], #passes in the real prompt with teh user's form data
+        suffix = "This trip is to {location} between {trip_start} and {trip_end}.  This person will travel {traveling_with} and wants to stay in {lodging}.  They want to {adventure}.  Create a daily itinerary for this trip using this information. You are a backend data processor of our app's programmatic workflow.  Output the itinerary as only JSON with no text before or after the JSON.", 
+        input_variables = ["location", "trip_start", "trip_end", "traveling_with", "lodging", "adventure"], 
     )
 
     # to check few_shot_prompt.format in the log
     # log.info(few_shot_prompt.format)
 
+    # new line added, return few_shot_prompt
+    return few_shot_prompt
+
+  
+    # commented out to update for first chain
     #few_shot_prompt formatted & returned
-    return few_shot_prompt.format(input = "This trip is to " + form_data["location"] + " between " + form_data["trip_start"] + " and " + form_data["trip_end"] + ".  This person will travel " + form_data["traveling_with_list"] + " and wants to stay in " + form_data["lodging"] + ".  They want to " + form_data["adventure"] + ".  Create a daily itinerary for this trip using this information. You are a backend data processor of our app's programmatic workflow.  Output the itinerary as only JSON with no text before or after the JSON."
-    ) 
+    # return few_shot_prompt.format(input = "This trip is to " + form_data["location"] + " between " + form_data["trip_start"] + " and " + form_data["trip_end"] + ".  This person will travel " + form_data["traveling_with_list"] + " and wants to stay in " + form_data["lodging"] + ".  They want to " + form_data["adventure"] + ".  Create a daily itinerary for this trip using this information. You are a backend data processor of our app's programmatic workflow.  Output the itinerary as only JSON with no text before or after the JSON."
+    # ) 
 
 # Define the route for the home page
 @app.route("/", methods=["GET"])
@@ -114,42 +119,47 @@ def plan_trip():
 
 # Define the route for view trip page with the generated trip itinerary
 @app.route("/view_trip", methods=["POST"])
+# updated to use a chain
 def view_trip():
 
     # create a comma-separated list for the multi-select fields
     traveling_with_list = ", ".join(request.form.getlist("traveling-with"))
     lodging_list = ", ".join(request.form.getlist("lodging"))
     adventure_list = ", ".join(request.form.getlist("adventure"))
-    # create a dictionary with the cleaned form data
-    cleaned_form_data = {
+    
+    # removed the argument and updated the function name
+    prompt = build_new_trip_prompt_template()
+    
+    # build the chain
+    chain = prompt | llm | parser
+
+    # updated to invoke the chain and pass the user's submitted from data
+    output = chain.invoke({
         "location": request.form["location-search"],
         "trip_start": request.form["trip-start"],
         "trip_end": request.form["trip-end"],
-        "traveling_with_list": traveling_with_list,
+        "traveling_with": traveling_with_list,
         "lodging": lodging_list, #changed key name from lodging_list
         "adventure": adventure_list, #changed key name from adventure_list
         "trip_name": request.form["trip-name"] # added back into dictionary
-    }
+    })
 
-    # call build_new_trip_prompt and pass it the cleaned data dictionary
-    prompt = build_new_trip_prompt(cleaned_form_data)
+   # log output
+    log.info(output)
 
+    return render_template("view-trip.html", output = output)
+
+    # code removed since llm is invoked in the chain
     # send the "cleaned" trip prompt to OpenAI (llm model)
-    response = llm.invoke(prompt)
+    # response = llm.invoke(prompt)
 
     # to see the response from OpenAI
     # commented out to parse
     # log.info(response) 
 
+    # code removed since parsing is now part of the chain
     # parse the model's response using parser, set to new variable called output
-    output = parser.parse(response)
-
-    # log output
-    log.info(output)
-   
-    # add second argument for the context dictionary as a key value pair, key = output, value = output
-    return render_template("view-trip.html", output = output)
-
+    # output = parser.parse(response)
 
 # Run the flask server
 if __name__ == "__main__":
